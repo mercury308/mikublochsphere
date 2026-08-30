@@ -10,7 +10,7 @@ An interactive, web-based visualizer designed to bridge quantum information theo
 
 * **Interactive 3D Sphere:** Orbit, pan, and zoom controls for intuitive visualization of state vectors in three-dimensional space using WebGL rendering.
 * **Quantum State Parameterization:** Dynamic manipulation of polar ($\theta$) and azimuthal ($\phi$) angles to navigate pure single-qubit states across the Hilbert space.
-* **Quantum Logic Gate Operations:** Real-time application and trajectory tracing of standard single-qubit transformations (Hadamard, Pauli-$X$, Pauli-$Y$, Pauli-$Z$, Phase $S$, and $\pi/8$ $T$ gates).
+* **Quantum Logic Gate Operations:** Real-time application and trajectory tracing of standard single-qubit transformations (Hadamard, Pauli-X, Pauli-Y, Pauli-Z, Phase S, and $\pi/8$ $T$ gates).
 * **Responsive Control Panel:** Clean UI with real-time vector representation updates, probability amplitude breakdowns, and visual theme consistency.
 
 ---
