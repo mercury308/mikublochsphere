@@ -4,6 +4,9 @@ An interactive, web-based visualizer designed to bridge quantum information theo
 
 **Live Application:** [https://mercury308.github.io/mikublochsphere/](https://mercury308.github.io/mikublochsphere/)
 
+<img width="1482" height="838" alt="Screenshot 2026-08-29 at 22-09-53 Miku Bloch Sphere" src="https://github.com/user-attachments/assets/6d5cc91a-3453-4e8a-a08a-a0293f7a7890" />
+
+
 ---
 
 ## Key Features
