@@ -3,38 +3,62 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multi-Wave Quantum Synthesizer</title>
+    <title>Miku Bloch Sphere</title>
     <link rel="stylesheet" href="style.css">
-    <!-- site audio & quantum engine CDNs -->
-    <script src="https://cloudflare.com"></script>
-    <script src="https://jsdelivr.net"></script>
 </head>
 <body>
 
 <div class="container">
-    <h1>4-Wave Qubit Synthesizer</h1>
-    <p class="subtitle">Control a 2-qubit system to morph between Sine, Triangle, Square, and Sawtooth waveforms.</p>
+    <h1 id="title-check">Miku Bloch Sphere Synth</h1>
+    <link rel="icon" type="image/png" href="miku.jpg">
+    <p class="subtitle">Simulate an open quantum system vector using Hatsune Miku's voice. Rotate the polar and azimuthal angles to filter the frequencies, and shrink the radius to induce decoherence noise.</p>
     
-    <button id="start-audio">Activate Audio Engine</button>
-
-    <div class="slider-group">
-        <label for="theta1">Qubit 1 Bias (θ₁): <span id="theta1-val">0</span> rad</label>
-        <input id="theta1" type="range" min="0" max="3.1416" step="0.01" value="0" disabled>
+    <button id="start-audio">Start Audio Engine</button>
+   
+    <div class="control-section">
+        <h3>1. Select Vocal Layer</h3>
+        <div class="btn-grid" id="vowel-grid">
+            <button class="selector-btn vocal-btn active" data-vowel="ah">Ah</button>
+            <button class="selector-btn vocal-btn" data-vowel="oo">Oo</button>
+            <button class="selector-btn vocal-btn" data-vowel="ee">Ee</button>
+            <button class="selector-btn vocal-btn" data-vowel="oh">Oh</button>
+        </div>
     </div>
 
-    <div class="slider-group">
-        <label for="theta2">Qubit 2 Bias (θ₂): <span id="theta2-val">0</span> rad</label>
-        <input id="theta2" type="range" min="0" max="3.1416" step="0.01" value="0" disabled>
+    <div class="control-section">
+        <h3>2. Select Waveform</h3>
+        <div class="btn-grid" id="wave-grid">
+            <button class="selector-btn wave-btn active" data-wave="sine">Sine</button>
+            <button class="selector-btn wave-btn" data-wave="triangle">Triangle</button>
+            <button class="selector-btn wave-btn" data-wave="sawtooth">Saw</button>
+            <button class="selector-btn wave-btn" data-wave="square">Square</button>
+        </div>
     </div>
 
-    <div class="slider-group">
-        <label for="phi">Phase Angle (φ): <span id="phi-val">0</span> rad</label>
-        <input id="phi" type="range" min="0" max="6.2831" step="0.01" value="0" disabled>
+    <!-- quantum vector space & texture controls -->
+    <div id="quantum-controls" class="control-section">
+        <h3>3. Quantum Vectors & Tone Modifiers</h3>
+        
+        <div class="slider-group">
+            <label for="theta">Polar (θ) - Vocal Filter Cutoff: <span id="theta-val">0.00</span> rad</label>
+            <input id="theta" type="range" min="0" max="3.1416" step="0.01" value="0" disabled>
+        </div>
+        
+        <div class="slider-group">
+            <label for="phi">Azimuthal (φ) - Vocal Filter Resonance (Q): <span id="phi-val">0.00</span> rad</label>
+            <input id="phi" type="range" min="0" max="6.2831" step="0.01" value="0" disabled>
+        </div>
+        
+        <div class="slider-group master-group" style="margin-top: 20px;">
+            <label for="position">〰️ Radius (r): <span id="position-val">0.00</span></label>
+            <input id="position" type="range" min="0" max="1.00" step="0.01" value="0.00" disabled>
+        </div>
     </div>
 
+    <!-- live system diagnostic matrix readout -->
     <div class="data-display">
-        <strong>Quantum State |Ψ⟩ Distributions:</strong><br>
-        <span id="state-vector">Initialize audio to observe state vector.</span>
+        <strong>Engine Quantum & Effect Diagnostics:</strong><br>
+        <div id="state-vector">Initialize the audio configuration matrix to view live diagnostic tracking data.</div>
     </div>
 </div>
 

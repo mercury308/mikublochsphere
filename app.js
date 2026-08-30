@@ -1,86 +1,219 @@
-// base audio engine: 4 distinct oscillators mapped to the 4 quantum basis states
-const sineOsc     = new Tone.Oscillator(220, "sine").start();
-const triangleOsc = new Tone.Oscillator(220, "triangle").start();
-const squareOsc   = new Tone.Oscillator(220, "square").start();
-const sawtoothOsc = new Tone.Oscillator(220, "sawtooth").start();
+let audioCtx, masterGainNode;
+let vocalPlayers = {}, vocalGains = {};
+let synthOscillators = {}, synthGains = {};
+let vibratoOsc, vibratoGain, vocalTextureFilter;
 
-// gain nodes to independently control the volume mix of each waveform
-const gain00 = new Tone.Gain(0).toDestination();
-const gain01 = new Tone.Gain(0).toDestination();
-const gain10 = new Tone.Gain(0).toDestination();
-const gain11 = new Tone.Gain(0).toDestination();
+let audioInitialized = false;
+let activeVowel = 'ah';
+let activeWave = 'sine';
 
-// oscillators connected to their designated volume gates
-sineOsc.connect(gain00);
-triangleOsc.connect(gain01);
-squareOsc.connect(gain10);
-sawtoothOsc.connect(gain11);
-
-// phase-modulated vibrato effect for spatial movement
-const phaseVibrato = new Tone.LFO(0, 215, 225).start();
-phaseVibrato.connect(sineOsc.frequency);
-phaseVibrato.connect(triangleOsc.frequency);
-phaseVibrato.connect(squareOsc.frequency);
-phaseVibrato.connect(sawtoothOsc.frequency);
-
-// UI DOM elements
+// DOM select hooks
 const startBtn = document.getElementById('start-audio');
-const t1Slider = document.getElementById('theta1');
-const t2Slider = document.getElementById('theta2');
+const thetaSlider = document.getElementById('theta');
 const phiSlider = document.getElementById('phi');
+const posSlider = document.getElementById('position');
 
-startBtn.addEventListener('click', async () => {
-    await Tone.start();
-    startBtn.style.display = 'none';
-    t1Slider.disabled = false;
-    t2Slider.disabled = false;
-    phiSlider.disabled = false;
-    updateQuantumSynth();
-});
-
-function updateQuantumSynth() {
-    const t1 = parseFloat(t1Slider.value);
-    const t2 = parseFloat(t2Slider.value);
-    const p  = parseFloat(phiSlider.value);
-
-    document.getElementById('theta1-val').innerText = t1.toFixed(2);
-    document.getElementById('theta2-val').innerText = t2.toFixed(2);
-    document.getElementById('phi-val').innerText = p.toFixed(2);
-
-    // compute single-qubit probability amplitudes using basic born rules
-    const a1 = Math.cos(t1 / 2); // qubit 1 |0> amplitude
-    const b1 = Math.sin(t1 / 2); // qubit 1 |1> amplitude
-    
-    const a2 = Math.cos(t2 / 2); // qubit 2 |0> amplitude
-    
-    // inject phase (phi) into the second qubit's |1> state component
-    const b2Real = Math.cos(p) * Math.sin(t2 / 2);
-    const b2Imag = Math.sin(p) * Math.sin(t2 / 2);
-
-    // calculate tensor product probabilities for the 2-qubit system
-    const p00 = Math.pow(a1 * a2, 2); // prob of |00> (sine)
-    const p01 = Math.pow(a1 * b2Real, 2) + Math.pow(a1 * b2Imag, 2); // prob of |01> (triangle)
-    const p10 = Math.pow(b1 * a2, 2); // prob of |10> (square)
-    const p11 = Math.pow(b1 * b2Real, 2) + Math.pow(b1 * b2Imag, 2); // prob of |11> (sawtooth)
-
-    // mapping quantum probabilities directly to volume levels of the corresponding oscillators
-    gain00.gain.linearRampToValueAtTime(p00, Tone.now() + 0.02);
-    gain01.gain.linearRampToValueAtTime(p01, Tone.now() + 0.02);
-    gain10.gain.linearRampToValueAtTime(p10, Tone.now() + 0.02);
-    gain11.gain.linearRampToValueAtTime(p11, Tone.now() + 0.02);
-
-    // modulate the LFO rate using the phase parameter
-    phaseVibrato.frequency.value = (p / Math.PI) * 4;
-
-    // output live structural data back onto the UI dashboard container
-    document.getElementById('state-vector').innerHTML = 
-        `|00⟩ Sine Wave:      ${(p00 * 100).toFixed(1)}% volume<br>` +
-        `|01⟩ Triangle Wave:  ${(p01 * 100).toFixed(1)}% volume<br>` +
-        `|10⟩ Square Wave:    ${(p10 * 100).toFixed(1)}% volume<br>` +
-        `|11⟩ Sawtooth Wave:  ${(p11 * 100).toFixed(1)}% volume<br>`;
+async function loadLocalSample(fileName) {
+    const response = await fetch(fileName);
+    if (!response.ok) throw new Error(`Resource pipeline failure: ${fileName}`);
+    const arrayBuffer = await response.arrayBuffer();
+    return await audioCtx.decodeAudioData(arrayBuffer);
 }
 
-// binding active inputs
-t1Slider.addEventListener('input', updateQuantumSynth);
-t2Slider.addEventListener('input', updateQuantumSynth);
-phiSlider.addEventListener('input', updateQuantumSynth);
+function initVocalTrack(key, buffer) {
+    vocalGains[key] = audioCtx.createGain();
+    vocalGains[key].gain.setValueAtTime(0, audioCtx.currentTime);
+    
+    // route vocal tracks through the dedicated quantum filter before the main output
+    vocalGains[key].connect(vocalTextureFilter);
+
+    vocalPlayers[key] = audioCtx.createBufferSource();
+    vocalPlayers[key].buffer = buffer;
+    vocalPlayers[key].loop = true;
+    vocalPlayers[key].connect(vocalGains[key]);
+}
+
+function initSynthOscillator(key, waveType) {
+    synthGains[key] = audioCtx.createGain();
+    synthGains[key].gain.setValueAtTime(0, audioCtx.currentTime);
+    synthGains[key].connect(masterGainNode);
+
+    synthOscillators[key] = audioCtx.createOscillator();
+    synthOscillators[key].type = waveType;
+    synthOscillators[key].frequency.setValueAtTime(220, audioCtx.currentTime); // Standardized C4 pitch
+    
+    // wire global pitch wigglyness LFO into the synthesizer arrays
+    vibratoGain.connect(synthOscillators[key].frequency);
+    
+    synthOscillators[key].connect(synthGains[key]);
+}
+
+startBtn.addEventListener('click', async () => {
+    try {
+        startBtn.innerText = "Deploying Matrix Elements...";
+        startBtn.disabled = true;
+
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContextClass();
+        
+        if (audioCtx.state === 'suspended') {
+            await audioCtx.resume();
+        }
+
+        const now = audioCtx.currentTime;
+
+        // establish master system volume control block
+        masterGainNode = audioCtx.createGain();
+        masterGainNode.gain.setValueAtTime(0.7, now);
+        masterGainNode.connect(audioCtx.destination);
+
+        // dedicated vocal filter for the bloch sphere morphing effect
+        vocalTextureFilter = audioCtx.createBiquadFilter();
+        vocalTextureFilter.type = "peaking";
+        vocalTextureFilter.frequency.setValueAtTime(1000, now);
+        vocalTextureFilter.Q.setValueAtTime(1.0, now);
+        vocalTextureFilter.gain.setValueAtTime(15, now); // 15dB boost to emphasize filter sweeps
+        vocalTextureFilter.connect(masterGainNode);
+
+        // position radius slider now controls the vibrato LFO speed and depth for a live wigglyness effect
+        vibratoOsc = audioCtx.createOscillator();
+        vibratoGain = audioCtx.createGain();
+        vibratoOsc.frequency.setValueAtTime(0, now); 
+        vibratoGain.gain.setValueAtTime(0, now);     
+        vibratoOsc.connect(vibratoGain);
+
+        // hook up vibrato to modulate the vocal filter frequency for an active wiggle effect
+        vibratoGain.connect(vocalTextureFilter.frequency);
+
+        // load files of miku's voice
+        const bAh = await loadLocalSample('miku_ah.wav');
+        const bOo = await loadLocalSample('miku_oo.wav');
+        const bEe = await loadLocalSample('miku_ee.wav');
+        const bOh = await loadLocalSample('miku_oh.wav');
+
+        initVocalTrack('ah', bAh);
+        initVocalTrack('oo', bOo);
+        initVocalTrack('ee', bEe);
+        initVocalTrack('oh', bOh);
+
+        // synth array oscillators for the accompaniment layer
+        initSynthOscillator('sine', 'sine');
+        initSynthOscillator('triangle', 'triangle');
+        initSynthOscillator('sawtooth', 'sawtooth');
+        initSynthOscillator('square', 'square');
+
+        Object.values(vocalPlayers).forEach(p => p.start(now));
+        Object.values(synthOscillators).forEach(o => o.start(now));
+        vibratoOsc.start(now);
+
+        audioInitialized = true;
+
+        // fully unlock all ranges inputs on the engine
+        const allSliders = document.querySelectorAll('input[type="range"]');
+        allSliders.forEach(slider => {
+            slider.removeAttribute('disabled');
+            slider.disabled = false;
+        });
+
+        startBtn.style.display = 'none';
+        setupButtonListeners();
+        updateEngineMatrix();
+
+    } catch (err) {
+        console.error("Audio block crash trace:", err);
+        startBtn.innerText = "Engine Check Fail";
+        alert("Make sure all four lowercase .wav files are uploaded directly alongside your code files!");
+    }
+});
+
+function setupButtonListeners() {
+    document.querySelectorAll('.vocal-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            document.querySelectorAll('.vocal-btn').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            activeVowel = e.target.getAttribute('data-vowel');
+            updateEngineMatrix();
+        });
+    });
+
+    document.querySelectorAll('.wave-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            document.querySelectorAll('.wave-btn').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            activeWave = e.target.getAttribute('data-wave');
+            if (activeWave === 'saw') activeWave = 'sawtooth'; 
+            updateEngineMatrix();
+        });
+    });
+}
+
+function updateEngineMatrix() {
+    if (!audioInitialized) return;
+    const now = audioCtx.currentTime;
+
+    const theta = parseFloat(thetaSlider.value);
+    const phi = parseFloat(phiSlider.value);
+    const position = parseFloat(posSlider.value);
+
+    // dynamic numerical labels tracking
+    document.getElementById('theta-val').innerText = theta.toFixed(2);
+    document.getElementById('phi-val').innerText = phi.toFixed(2);
+    document.getElementById('position-val').innerText = position.toFixed(2);
+
+    // 1-qubit bloch sphere trigonometric math transformations
+    const alphaReal = Math.cos(theta / 2);
+    const betaReal  = Math.cos(phi) * Math.sin(theta / 2);
+    const betaImag  = Math.sin(phi) * Math.sin(theta / 2);
+
+    const p0 = Math.pow(alphaReal, 2);
+    const p1 = Math.pow(betaReal, 2) + Math.pow(betaImag, 2);
+
+    // theta controls the filter cutoff spectrum cleanly between 300Hz and 4500Hz
+    const targetCutoff = 300 + (p0 * 4200);
+    vocalTextureFilter.frequency.setValueAtTime(targetCutoff, now);
+
+    // phi maps the phase angle parameter directly to scale filter resonance sharpness (Q) from 1 to 18
+    const targetResonance = 1 + ((phi / 6.2831) * 17);
+    vocalTextureFilter.Q.setValueAtTime(targetResonance, now);
+
+    // evaluate vocal gain node settings based on active user button state selection choice
+    Object.keys(vocalGains).forEach(vKey => {
+        const targetVol = (vKey === activeVowel) ? 0.65 : 0.0;
+        vocalGains[vKey].gain.setValueAtTime(targetVol, now);
+    });
+
+    // reset all oscillator density gain parameters to zero
+    Object.keys(synthGains).forEach(sKey => synthGains[sKey].gain.setValueAtTime(0, now));
+
+    // map synth array volume states to the active wave selection button
+    let finalTargetKey = activeWave;
+    if (finalTargetKey === 'saw') finalTargetKey = 'sawtooth';
+    if (synthGains[finalTargetKey]) {
+        synthGains[finalTargetKey].gain.setValueAtTime(0.25, now); // static baseline mix for the synth accompaniment
+    }
+
+    // position slider now controls the vibrato LFO speed and depth for a live wigglyness effect
+    const computedWiggleSpeed = position * 10; // max out vibrato speed at 10Hz
+    const computedWiggleDepth = position * 60; // max pitch filter sweep depth at 60Hz
+    
+    vibratoOsc.frequency.setValueAtTime(computedWiggleSpeed, now);
+    vibratoGain.gain.setValueAtTime(computedWiggleDepth, now);
+
+    // diagnostics text tracking output layout
+    document.getElementById('state-vector').innerHTML = 
+        `<div class="wave-line wave-sine"><span>Active Vocal Layer [ ${activeVowel.toUpperCase()} ]:</span> <span>Processing FX</span></div>` +
+        `<div class="wave-line wave-saw"><span>Active Synth Layer [ ${finalTargetKey.toUpperCase()} ]:</span> <span>Running</span></div>` +
+        `<div style="margin: 10px 0; border-top: 1px dashed #17262c;"></div>` +
+        `<div style="font-size: 11px; color: #39c5bb; font-weight: bold;">Bloch Sphere Vocal Modulation:</div>` +
+        `<div class="wave-line wave-sine"><span> Formant Cutoff Spectrum Target:</span> <span>${Math.round(targetCutoff)} Hz</span></div>` +
+        `<div class="wave-line wave-tri"><span> Resonance Sharpness Index (Q):</span> <span>${targetResonance.toFixed(1)}</span></div>` +
+        `<div style="margin-top: 8px; font-size: 10px; color: #5a717c;">Quantum Coordinates Mapping Status -> |0⟩: ${(p0*100).toFixed(0)}% | |1⟩: ${(p1*100).toFixed(0)}%</div>`;
+}
+
+// bind ranges parameters controls mapping variables updates
+[thetaSlider, phiSlider, posSlider].forEach(slider => {
+    slider.addEventListener('input', updateEngineMatrix);
+});
+
+
+
